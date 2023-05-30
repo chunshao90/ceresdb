@@ -634,11 +634,18 @@ impl<'a> Writer<'a> {
 
 #[cfg(test)]
 mod tests {
+    use arrow::ipc;
+    use arrow_ext::ipc::{
+        encode_record_batch, CompressOptions, CompressionMethod, RecordBatchesEncoder,
+    };
     use common_types::{
+        column_schema,
         column_schema::Builder as ColumnSchemaBuilder,
         datum::{Datum, DatumKind},
+        record_batch::RecordBatchWithKeyBuilder,
         row::{Row, RowGroupBuilder},
-        schema::Builder as SchemaBuilder,
+        schema::{Builder as SchemaBuilder, Builder, TSID_COLUMN},
+        string::StringBytes,
         time::Timestamp,
     };
 
@@ -761,5 +768,104 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_row_builder() {
+        let column_size = 20;
+        let row_size = 10000;
+
+        let mut schema_buildler = Builder::new()
+            .auto_increment_column_id(true)
+            .add_key_column(
+                column_schema::Builder::new(TSID_COLUMN.to_string(), DatumKind::UInt64)
+                    .build()
+                    .expect("should succeed build column schema"),
+            )
+            .unwrap()
+            .add_key_column(
+                column_schema::Builder::new("timestamp".to_string(), DatumKind::Timestamp)
+                    .build()
+                    .expect("should succeed build column schema"),
+            )
+            .unwrap();
+        for i in 0..column_size {
+            schema_buildler = schema_buildler
+                .add_normal_column(
+                    column_schema::Builder::new(i.to_string(), DatumKind::Int64)
+                        .build()
+                        .expect("should succeed build column schema"),
+                )
+                .unwrap();
+        }
+        let schema = schema_buildler
+            .build()
+            .expect("should succeed to build schema");
+
+        let mut test_datums = Vec::with_capacity(row_size);
+        for i in 0..row_size {
+            let mut row = Vec::with_capacity(column_size);
+            for j in 0..column_size {
+                row.push(Datum::Int64(100));
+            }
+            test_datums.push(row);
+        }
+        let mut row_group_builder = RowGroupBuilder::new(schema.clone());
+
+        for i in 0..row_size {
+            let mut row_builder = row_group_builder.row_builder();
+            row_builder = row_builder
+                .append_datum(Datum::UInt64(0))
+                .unwrap()
+                .append_datum(Datum::Timestamp(Timestamp::new(0)))
+                .unwrap();
+            for j in 0..column_size {
+                row_builder = row_builder.append_datum(test_datums[i][j].clone()).unwrap();
+            }
+            row_builder.finish().unwrap();
+        }
+
+        let row_group = row_group_builder.build();
+
+        println!("schema:{schema:?}");
+
+        let mut encode_ctx = EncodeContext::new(row_group.clone());
+        schema
+            .compatible_for_write(
+                encode_ctx.row_group.schema(),
+                &mut encode_ctx.index_in_writer,
+            )
+            .unwrap();
+        let time = std::time::Instant::now();
+        encode_ctx.encode_rows(&schema).unwrap();
+        let bytes = encode_ctx.encoded_rows;
+        println!(
+            "EncodeContext len:{}, cost:{:?}",
+            bytes.iter().map(|v| v.len()).sum::<usize>(),
+            time.elapsed()
+        );
+
+        let time = std::time::Instant::now();
+        let mut builder = RecordBatchWithKeyBuilder::new(schema.to_record_schema_with_key());
+
+        for row in row_group {
+            builder.append_row(row).unwrap();
+        }
+
+        let record_batch_with_key = builder.build().unwrap();
+        let record_batch = record_batch_with_key.into_record_batch();
+        let compress_output = encode_record_batch(
+            &record_batch.into_arrow_record_batch(),
+            CompressOptions {
+                compress_min_length: 800000 * 1024,
+                method: CompressionMethod::Zstd,
+            },
+        )
+        .unwrap();
+        println!(
+            "Arrow ipc len:{}, cost:{:?}",
+            compress_output.payload.len(),
+            time.elapsed()
+        );
     }
 }

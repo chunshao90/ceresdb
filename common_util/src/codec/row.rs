@@ -1,4 +1,4 @@
-// Copyright 2022 CeresDB Project Authors. Licensed under Apache-2.0.
+// Copyright 2022-2023 CeresDB Project Authors. Licensed under Apache-2.0.
 
 //! Row encoding utils
 //!
@@ -146,18 +146,13 @@ pub fn encode_row_group_for_wal(
     };
 
     // Use estimated size of first row to avoid compute all
-    let row_estimated_size = match row_group.get_row(0) {
-        Some(first_row) => row_encoder.estimate_encoded_size(first_row),
-        // The row group is empty
-        None => return Ok(()),
-    };
 
     encoded_rows.reserve(row_group.num_rows());
 
     // Each row is constructed in writer schema, we need to encode it in
     // `table_schema`
     for row in row_group {
-        let mut buf = Vec::with_capacity(row_estimated_size);
+        let mut buf = Vec::with_capacity(0);
         row_encoder.encode(&mut buf, row)?;
 
         encoded_rows.push(buf);

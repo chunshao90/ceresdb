@@ -81,6 +81,7 @@ dependencies = [
  "arc-swap 1.6.0",
  "arena",
  "arrow 38.0.0",
+ "arrow_ext",
  "async-stream",
  "async-trait",
  "base64 0.13.1",
