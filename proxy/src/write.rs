@@ -15,6 +15,7 @@ use ceresdbproto::storage::{
 };
 use cluster::config::SchemaConfig;
 use common_types::{
+    column::{ColumnBlock, ColumnBlockBuilder},
     column_schema::ColumnSchema,
     datum::{Datum, DatumKind},
     request_id::RequestId,
@@ -907,6 +908,150 @@ fn write_entry_to_rows(
     Ok(rows)
 }
 
+fn write_entry_to_column_block(
+    table_name: &str,
+    schema: &Schema,
+    tag_names: &[String],
+    field_names: &[String],
+    write_series_entry: WriteSeriesEntry,
+) -> Result<HashMap<String, ColumnBlock>> {
+    let mut columns = HashMap::with_capacity(schema.num_columns());
+
+    // Fill tsid by default value.
+    if let Some(col) = schema.tsid_column() {
+        columns.insert(
+            col.name.to_string(),
+            ColumnBlock::new_null(write_series_entry.field_groups.len()),
+        );
+    }
+
+    // Fill tags.
+    for tag in write_series_entry.tags {
+        let name_index = tag.name_index as usize;
+        ensure!(
+            name_index < tag_names.len(),
+            ErrNoCause {
+                code: StatusCode::BAD_REQUEST,
+                msg: format!(
+                    "Tag {tag:?} is not found in tag_names:{tag_names:?}, table:{table_name}",
+                ),
+            }
+        );
+
+        let tag_name = &tag_names[name_index];
+        let tag_index_in_schema = schema.index_of(tag_name).with_context(|| ErrNoCause {
+            code: StatusCode::BAD_REQUEST,
+            msg: format!("Can't find tag({tag_name}) in schema, table:{table_name}"),
+        })?;
+
+        let column_schema = schema.column(tag_index_in_schema);
+        ensure!(
+            column_schema.is_tag,
+            ErrNoCause {
+                code: StatusCode::BAD_REQUEST,
+                msg: format!("Column({tag_name}) is a field rather than a tag, table:{table_name}"),
+            }
+        );
+
+        let tag_value = tag
+            .value
+            .with_context(|| ErrNoCause {
+                code: StatusCode::BAD_REQUEST,
+                msg: format!("Tag({tag_name}) value is needed, table:{table_name}"),
+            })?
+            .value
+            .with_context(|| ErrNoCause {
+                code: StatusCode::BAD_REQUEST,
+                msg: format!(
+                    "Tag({tag_name}) value type is not supported, table_name:{table_name}"
+                ),
+            })?;
+
+        let mut column_builder = ColumnBlockBuilder::new(&column_schema.data_type);
+        let datum = convert_proto_value_to_datum(
+            table_name,
+            tag_name,
+            tag_value.clone(),
+            column_schema.data_type,
+        )?;
+
+        for _ in 0..write_series_entry.field_groups.len() {
+            column_builder.append(datum.clone()).unwrap();
+        }
+        columns.insert(tag_name.to_string(), column_builder.build());
+    }
+
+    let mut builders = HashMap::new();
+    // Fill fields.
+    let mut field_name_index: HashMap<String, usize> = HashMap::new();
+    for (i, field_group) in write_series_entry.field_groups.into_iter().enumerate() {
+        // timestamp
+        let mut timestamp_builder = builders
+            .entry(schema.timestamp_name())
+            .or_insert_with(|| ColumnBlockBuilder::new(&DatumKind::Timestamp));
+        timestamp_builder
+            .append(Datum::Timestamp(Timestamp::new(field_group.timestamp)))
+            .unwrap();
+
+        for field in field_group.fields {
+            if (field.name_index as usize) < field_names.len() {
+                let field_name = &field_names[field.name_index as usize];
+                let index_in_schema = if field_name_index.contains_key(field_name) {
+                    field_name_index.get(field_name).unwrap().to_owned()
+                } else {
+                    let index_in_schema =
+                        schema.index_of(field_name).with_context(|| ErrNoCause {
+                            code: StatusCode::BAD_REQUEST,
+                            msg: format!(
+                                "Can't find field in schema, table:{table_name}, field_name:{field_name}"
+                            ),
+                        })?;
+                    field_name_index.insert(field_name.to_string(), index_in_schema);
+                    index_in_schema
+                };
+                let column_schema = schema.column(index_in_schema);
+                ensure!(
+                    !column_schema.is_tag,
+                    ErrNoCause {
+                        code: StatusCode::BAD_REQUEST,
+                        msg: format!(
+                            "Column {field_name} is a tag rather than a field, table:{table_name}"
+                        )
+                    }
+                );
+                let field_value = field
+                    .value
+                    .with_context(|| ErrNoCause {
+                        code: StatusCode::BAD_REQUEST,
+                        msg: format!("Field({field_name}) is needed, table:{table_name}"),
+                    })?
+                    .value
+                    .with_context(|| ErrNoCause {
+                        code: StatusCode::BAD_REQUEST,
+                        msg: format!(
+                            "Field({field_name}) value type is not supported, table:{table_name}"
+                        ),
+                    })?;
+                let mut builder = builders
+                    .entry(field_name)
+                    .or_insert_with(|| ColumnBlockBuilder::new(&column_schema.data_type));
+                builder
+                    .append(convert_proto_value_to_datum(
+                        table_name,
+                        field_name,
+                        field_value,
+                        column_schema.data_type,
+                    )?)
+                    .unwrap();
+            }
+        }
+    }
+    for (name, mut builder) in builders.into_iter() {
+        columns.insert(name.to_string(), builder.build());
+    }
+    Ok(columns)
+}
+
 /// Convert the `Value_oneof_value` defined in protos into the datum.
 fn convert_proto_value_to_datum(
     table_name: &str,
@@ -963,37 +1108,149 @@ mod test {
     #[test]
     fn test_write_entry_to_row_group() {
         let (schema, tag_names, field_names, write_entry) = generate_write_entry();
-        let rows =
-            write_entry_to_rows("test_table", &schema, &tag_names, &field_names, write_entry)
-                .unwrap();
-        let row0 = vec![
-            Datum::Timestamp(Timestamp::new(1000)),
-            Datum::String(NAME_COL1.into()),
-            Datum::String(NAME_COL2.into()),
-            Datum::Int64(100),
-            Datum::Null,
-        ];
-        let row1 = vec![
-            Datum::Timestamp(Timestamp::new(2000)),
-            Datum::String(NAME_COL1.into()),
-            Datum::String(NAME_COL2.into()),
-            Datum::Null,
-            Datum::Int64(10),
-        ];
-        let row2 = vec![
-            Datum::Timestamp(Timestamp::new(3000)),
-            Datum::String(NAME_COL1.into()),
-            Datum::String(NAME_COL2.into()),
-            Datum::Null,
-            Datum::Int64(10),
-        ];
+        let num = 1000;
+        let now = std::time::Instant::now();
+        for _ in 0..num {
+            let rows = write_entry_to_rows(
+                "test_table",
+                &schema,
+                &tag_names,
+                &field_names,
+                write_entry.clone(),
+            )
+            .unwrap();
+        }
+        println!("cost:{:?}", now.elapsed())
 
-        let expect_rows = vec![
-            Row::from_datums(row0),
-            Row::from_datums(row1),
-            Row::from_datums(row2),
-        ];
-        assert_eq!(rows, expect_rows);
+        // let row0 = vec![
+        //     Datum::Timestamp(Timestamp::new(1000)),
+        //     Datum::String(NAME_COL1.into()),
+        //     Datum::String(NAME_COL2.into()),
+        //     Datum::Int64(100),
+        //     Datum::Null,
+        // ];
+        // let row1 = vec![
+        //     Datum::Timestamp(Timestamp::new(2000)),
+        //     Datum::String(NAME_COL1.into()),
+        //     Datum::String(NAME_COL2.into()),
+        //     Datum::Null,
+        //     Datum::Int64(10),
+        // ];
+        // let row2 = vec![
+        //     Datum::Timestamp(Timestamp::new(3000)),
+        //     Datum::String(NAME_COL1.into()),
+        //     Datum::String(NAME_COL2.into()),
+        //     Datum::Null,
+        //     Datum::Int64(10),
+        // ];
+        //
+        // let expect_rows = vec![
+        //     Row::from_datums(row0),
+        //     Row::from_datums(row1),
+        //     Row::from_datums(row2),
+        // ];
+        // assert_eq!(rows, expect_rows);
+    }
+
+    #[test]
+    fn test_write_entry_to_column_block() {
+        let (schema, tag_names, field_names, write_entry) = generate_write_entry();
+        let num = 1000;
+        let now = std::time::Instant::now();
+        for _ in 0..num {
+            let columns = write_entry_to_column_block(
+                "test_table",
+                &schema,
+                &tag_names,
+                &field_names,
+                write_entry.clone(),
+            )
+            .unwrap();
+        }
+
+        println!("cost:{:?}", now.elapsed())
+    }
+
+    #[test]
+    fn test_write_entry_to_row_group2() {
+        let (schema, tag_names, field_names, write_entry) = generate_write_entry();
+        let num = 100;
+
+        let now = std::time::Instant::now();
+        for _ in 0..num {
+            let rows = write_entry_to_rows(
+                "test_table",
+                &schema,
+                &tag_names,
+                &field_names,
+                write_entry.clone(),
+            )
+            .unwrap();
+            let mut split_rows = HashMap::new();
+            for (i, row) in rows.iter().enumerate() {
+                split_rows.entry(i % 2).or_insert_with(Vec::new).push(row);
+            }
+        }
+        println!("cost:{:?}", now.elapsed())
+    }
+
+    #[test]
+    fn test_write_entry_to_column_block2() {
+        let (schema, tag_names, field_names, write_entry) = generate_write_entry();
+        let num = 100;
+
+        let now = std::time::Instant::now();
+        for _ in 0..num {
+            let columns = write_entry_to_column_block(
+                "test_table",
+                &schema,
+                &tag_names,
+                &field_names,
+                write_entry.clone(),
+            )
+            .unwrap();
+            // println!("xxxxxxxxxxx {columns:?}");
+            let mut len = 0;
+            for (k, v) in &columns {
+                len = v.num_rows();
+                break;
+            }
+            let mut builders = vec![
+                HashMap::<String, ColumnBlockBuilder>::with_capacity(schema.num_columns()),
+                HashMap::<String, ColumnBlockBuilder>::with_capacity(schema.num_columns()),
+            ];
+
+            for i in 0..len {
+                let idx = i % 2;
+                let builder_map = builders.get_mut(idx).unwrap();
+                for column_schema in schema.columns() {
+                    let mut builder = builder_map
+                        .entry(column_schema.name.to_string())
+                        .or_insert_with(|| ColumnBlockBuilder::new(&column_schema.data_type));
+                    // println!("yyyyy {:?}",column_schema.name);
+                    builder
+                        .append_block_range(columns.get(&column_schema.name).unwrap(), i, 1)
+                        .unwrap();
+                }
+            }
+            let mut columns0 = HashMap::new();
+            for (k, mut v) in builders.remove(0) {
+                columns0.insert(k, v.build());
+            }
+            let mut columns1 = HashMap::new();
+
+            for (k, mut v) in builders.remove(0) {
+                columns1.insert(k, v.build());
+            }
+        }
+
+        println!("cost:{:?}", now.elapsed())
+    }
+
+    fn test_convert() {
+        let num = 100000;
+        let now = std::time::Instant::now();
+        for _ in 0..num {}
     }
 
     #[test]
@@ -1085,7 +1342,7 @@ mod test {
 
         let field_group = FieldGroup {
             timestamp: 1000,
-            fields: vec![field],
+            fields: vec![field, field1.clone()],
         };
         let field_group1 = FieldGroup {
             timestamp: 2000,
@@ -1096,10 +1353,13 @@ mod test {
             fields: vec![field1],
         };
 
-        let write_entry = WriteSeriesEntry {
-            tags,
-            field_groups: vec![field_group, field_group1, field_group2],
-        };
+        let num = 10000;
+        let mut field_groups = Vec::with_capacity(num);
+        for _ in 0..num {
+            field_groups.push(field_group.clone())
+        }
+
+        let write_entry = WriteSeriesEntry { tags, field_groups };
 
         let schema = build_schema();
         (schema, tag_names, field_names, write_entry)

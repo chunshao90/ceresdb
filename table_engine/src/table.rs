@@ -291,9 +291,22 @@ impl fmt::Display for TableId {
 
 #[derive(Clone, Debug)]
 pub struct WriteRequest {
+    // pub columns: HashMap<String, Vec<Option<Datum>>>,
     /// rows to write
     pub row_group: RowGroup,
 }
+
+// impl WriteRequest {
+//     pub fn num_rows(&self) -> usize {
+//         if self.columns.is_empty() {
+//             0
+//         } else {
+//             for (_key, values) in self.columns {
+//                 return values.len();
+//             }
+//         }
+//     }
+// }
 
 #[derive(Clone, Debug)]
 pub struct ReadOptions {
