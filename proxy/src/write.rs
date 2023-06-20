@@ -24,6 +24,7 @@ use common_types::{
     time::Timestamp,
 };
 use common_util::error::BoxError;
+use datafusion::execution::context::DataFilePaths;
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use http::StatusCode;
 use interpreters::interpreter::Output;
@@ -41,6 +42,7 @@ use table_engine::table::TableRef;
 use tonic::transport::Channel;
 
 use crate::{
+    column::Column,
     error::{ErrNoCause, ErrWithCause, Internal, InternalNoCause, Result},
     forward::{ForwardResult, ForwarderRef},
     Context, Proxy,
@@ -837,6 +839,12 @@ fn write_entry_to_rows(
                     "Tag({tag_name}) value type is not supported, table_name:{table_name}"
                 ),
             })?;
+        let datum = convert_proto_value_to_datum(
+            table_name,
+            tag_name,
+            tag_value.clone(),
+            column_schema.data_type,
+        )?;
         for row in &mut rows {
             row[tag_index_in_schema] = convert_proto_value_to_datum(
                 table_name,
@@ -1052,6 +1060,146 @@ fn write_entry_to_column_block(
     Ok(columns)
 }
 
+fn write_entry_to_column(
+    table_name: &str,
+    schema: &Schema,
+    tag_names: &[String],
+    field_names: &[String],
+    write_series_entry: WriteSeriesEntry,
+) -> Result<HashMap<String, Column>> {
+    let mut columns = HashMap::with_capacity(schema.num_columns());
+
+    // Fill tsid by default value.
+    // if let Some(col) = schema.tsid_column() {
+    //     columns.insert(
+    //         col.name.to_string(),
+    //         ColumnBlock::new_null(write_series_entry.field_groups.len()),
+    //     );
+    // }
+
+    let row_count = write_series_entry.field_groups.len();
+    // println!("row_count:{}", row_count);
+
+    // Fill tags.
+    for tag in write_series_entry.tags {
+        let name_index = tag.name_index as usize;
+        ensure!(
+            name_index < tag_names.len(),
+            ErrNoCause {
+                code: StatusCode::BAD_REQUEST,
+                msg: format!(
+                    "Tag {tag:?} is not found in tag_names:{tag_names:?}, table:{table_name}",
+                ),
+            }
+        );
+
+        let tag_name = &tag_names[name_index];
+        let tag_index_in_schema = schema.index_of(tag_name).with_context(|| ErrNoCause {
+            code: StatusCode::BAD_REQUEST,
+            msg: format!("Can't find tag({tag_name}) in schema, table:{table_name}"),
+        })?;
+
+        let column_schema = schema.column(tag_index_in_schema);
+        ensure!(
+            column_schema.is_tag,
+            ErrNoCause {
+                code: StatusCode::BAD_REQUEST,
+                msg: format!("Column({tag_name}) is a field rather than a tag, table:{table_name}"),
+            }
+        );
+
+        let tag_value = tag
+            .value
+            .with_context(|| ErrNoCause {
+                code: StatusCode::BAD_REQUEST,
+                msg: format!("Tag({tag_name}) value is needed, table:{table_name}"),
+            })?
+            .value
+            .with_context(|| ErrNoCause {
+                code: StatusCode::BAD_REQUEST,
+                msg: format!(
+                    "Tag({tag_name}) value type is not supported, table_name:{table_name}"
+                ),
+            })?;
+        let mut column = Column::new(row_count, column_schema.data_type);
+        let datum = convert_proto_value_to_datum(
+            table_name,
+            tag_name,
+            tag_value.clone(),
+            column_schema.data_type,
+        )?;
+
+        for _ in 0..write_series_entry.field_groups.len() {
+            // println!("xx tag_name:{}, column:{:?}", tag_name, column );
+            column.append(datum.clone());
+        }
+        // println!("xx tag_name:{}, column:{:?}", tag_name, column );
+        columns.insert(tag_name.to_string(), column);
+    }
+
+    // Fill fields.
+    let mut field_name_index: HashMap<String, usize> = HashMap::new();
+    for (i, field_group) in write_series_entry.field_groups.into_iter().enumerate() {
+        // timestamp
+        let mut timestamp_column = columns
+            .entry(schema.timestamp_name().to_string())
+            .or_insert_with(|| Column::new(row_count, DatumKind::Timestamp));
+        timestamp_column.append(Datum::Timestamp(Timestamp::new(field_group.timestamp)));
+
+        for field in field_group.fields {
+            if (field.name_index as usize) < field_names.len() {
+                let field_name = &field_names[field.name_index as usize];
+                let index_in_schema = if field_name_index.contains_key(field_name) {
+                    field_name_index.get(field_name).unwrap().to_owned()
+                } else {
+                    let index_in_schema =
+                        schema.index_of(field_name).with_context(|| ErrNoCause {
+                            code: StatusCode::BAD_REQUEST,
+                            msg: format!(
+                                "Can't find field in schema, table:{table_name}, field_name:{field_name}"
+                            ),
+                        })?;
+                    field_name_index.insert(field_name.to_string(), index_in_schema);
+                    index_in_schema
+                };
+                let column_schema = schema.column(index_in_schema);
+                ensure!(
+                    !column_schema.is_tag,
+                    ErrNoCause {
+                        code: StatusCode::BAD_REQUEST,
+                        msg: format!(
+                            "Column {field_name} is a tag rather than a field, table:{table_name}"
+                        )
+                    }
+                );
+                let field_value = field
+                    .value
+                    .with_context(|| ErrNoCause {
+                        code: StatusCode::BAD_REQUEST,
+                        msg: format!("Field({field_name}) is needed, table:{table_name}"),
+                    })?
+                    .value
+                    .with_context(|| ErrNoCause {
+                        code: StatusCode::BAD_REQUEST,
+                        msg: format!(
+                            "Field({field_name}) value type is not supported, table:{table_name}"
+                        ),
+                    })?;
+                let mut builder = columns
+                    .entry(field_name.to_string())
+                    .or_insert_with(|| Column::new(row_count, column_schema.data_type));
+                builder.append(convert_proto_value_to_datum(
+                    table_name,
+                    field_name,
+                    field_value,
+                    column_schema.data_type,
+                )?);
+            }
+        }
+    }
+    Ok(columns)
+}
+
 /// Convert the `Value_oneof_value` defined in protos into the datum.
 fn convert_proto_value_to_datum(
     table_name: &str,
@@ -1086,17 +1234,28 @@ fn convert_proto_value_to_datum(
 
 #[cfg(test)]
 mod test {
+    use std::{mem, time::Duration};
+
+    use arrow::record_batch::RecordBatch;
+    use arrow_ext::{ipc, ipc::CompressOptions};
     use ceresdbproto::storage::{value, Field, FieldGroup, Tag, Value, WriteSeriesEntry};
     use common_types::{
+        bytes::ByteVec,
         column_schema::{self},
         datum::{Datum, DatumKind},
+        record_batch::RecordBatchData,
         row::Row,
-        schema::Builder,
+        schema::{Builder, IndexInWriterSchema},
         time::Timestamp,
+    };
+    use common_util::codec::{
+        row::{encode_row_group_for_wal, WalRowEncoder},
+        Encoder,
     };
     use system_catalog::sys_catalog_table::TIMESTAMP_COLUMN_NAME;
 
     use super::*;
+    use crate::column::ColumnData;
 
     const NAME_COL1: &str = "col1";
     const NAME_NEW_COL1: &str = "new_col1";
@@ -1105,6 +1264,7 @@ mod test {
     const NAME_COL4: &str = "col4";
     const NAME_COL5: &str = "col5";
 
+    // convert write entry to row group
     #[test]
     fn test_write_entry_to_row_group() {
         let (schema, tag_names, field_names, write_entry) = generate_write_entry();
@@ -1152,6 +1312,7 @@ mod test {
         // assert_eq!(rows, expect_rows);
     }
 
+    // convert write entry to column block
     #[test]
     fn test_write_entry_to_column_block() {
         let (schema, tag_names, field_names, write_entry) = generate_write_entry();
@@ -1171,8 +1332,42 @@ mod test {
         println!("cost:{:?}", now.elapsed())
     }
 
+    fn encode_rows_for_wal(
+        rows: &Vec<Row>,
+        table_schema: &Schema,
+        index_in_writer: &IndexInWriterSchema,
+        encoded_rows: &mut Vec<ByteVec>,
+    ) -> Result<()> {
+        let row_encoder = WalRowEncoder {
+            table_schema,
+            index_in_writer,
+        };
+
+        // Use estimated size of first row to avoid compute all
+        let row_estimated_size = match rows.get(0) {
+            Some(first_row) => row_encoder.estimate_encoded_size(first_row),
+            // The row group is empty
+            None => return Ok(()),
+        };
+
+        encoded_rows.reserve(rows.len());
+
+        // Each row is constructed in writer schema, we need to encode it in
+        // `table_schema`
+        for row in rows {
+            let mut buf = Vec::with_capacity(row_estimated_size);
+            row_encoder.encode(&mut buf, row).unwrap();
+
+            encoded_rows.push(buf);
+        }
+
+        Ok(())
+    }
+
+    // convert write entry to column block
+    // split rows
     #[test]
-    fn test_write_entry_to_row_group2() {
+    fn test_write_entry_to_row_group_split() {
         let (schema, tag_names, field_names, write_entry) = generate_write_entry();
         let num = 100;
 
@@ -1190,18 +1385,34 @@ mod test {
             for (i, row) in rows.iter().enumerate() {
                 split_rows.entry(i % 2).or_insert_with(Vec::new).push(row);
             }
+
+            // let mut wal_encoder = Vec::new();
+            // encode_rows_for_wal(
+            //     &rows,
+            //     &schema,
+            //     &IndexInWriterSchema::for_same_schema(schema.num_columns()),
+            //     &mut wal_encoder,
+            // )
+            // .unwrap();
         }
         println!("cost:{:?}", now.elapsed())
     }
 
+    // convert write entry to column block
+    // split rows
+    // row group to wal
     #[test]
-    fn test_write_entry_to_column_block2() {
+    fn test_write_entry_to_row_group_wal() {
         let (schema, tag_names, field_names, write_entry) = generate_write_entry();
         let num = 100;
 
         let now = std::time::Instant::now();
+        let mut decode_cost = Duration::new(0, 0);
+        let mut split_cost = Duration::new(0, 0);
+        let mut wal_encode_cost = Duration::new(0, 0);
         for _ in 0..num {
-            let columns = write_entry_to_column_block(
+            let now0 = Instant::now();
+            let rows = write_entry_to_rows(
                 "test_table",
                 &schema,
                 &tag_names,
@@ -1209,7 +1420,45 @@ mod test {
                 write_entry.clone(),
             )
             .unwrap();
-            // println!("xxxxxxxxxxx {columns:?}");
+            decode_cost += now0.elapsed();
+            let now0 = Instant::now();
+            let mut split_rows = HashMap::new();
+            for (i, row) in rows.iter().enumerate() {
+                split_rows.entry(i % 2).or_insert_with(Vec::new).push(row);
+            }
+            split_cost += now0.elapsed();
+
+            let now0 = Instant::now();
+            let mut wal_encoder = Vec::new();
+            encode_rows_for_wal(
+                &rows,
+                &schema,
+                &IndexInWriterSchema::for_same_schema(schema.num_columns()),
+                &mut wal_encoder,
+            )
+            .unwrap();
+            wal_encode_cost += now0.elapsed();
+        }
+        println!("cost:{:?}, decode_cost:{decode_cost:?}, split_cost:{split_cost:?}, wal_encode_cost:{wal_encode_cost:?}", now.elapsed())
+    }
+
+    // convert write entry to column block
+    // split rows
+    #[test]
+    fn test_write_entry_to_column_block_split() {
+        let (schema, tag_names, field_names, write_entry) = generate_write_entry();
+        let num = 100;
+
+        let now = std::time::Instant::now();
+        for _ in 0..num {
+            let mut columns = write_entry_to_column_block(
+                "test_table",
+                &schema,
+                &tag_names,
+                &field_names,
+                write_entry.clone(),
+            )
+            .unwrap();
             let mut len = 0;
             for (k, v) in &columns {
                 len = v.num_rows();
@@ -1220,17 +1469,101 @@ mod test {
                 HashMap::<String, ColumnBlockBuilder>::with_capacity(schema.num_columns()),
             ];
 
-            for i in 0..len {
-                let idx = i % 2;
-                let builder_map = builders.get_mut(idx).unwrap();
-                for column_schema in schema.columns() {
-                    let mut builder = builder_map
-                        .entry(column_schema.name.to_string())
-                        .or_insert_with(|| ColumnBlockBuilder::new(&column_schema.data_type));
-                    // println!("yyyyy {:?}",column_schema.name);
-                    builder
-                        .append_block_range(columns.get(&column_schema.name).unwrap(), i, 1)
-                        .unwrap();
+            for column_schema in schema.columns() {
+                let column = columns.get(&column_schema.name).unwrap();
+                let builder_map = builders.get_mut(0).unwrap();
+                let mut builder = builder_map
+                    .entry(column_schema.name.to_string())
+                    .or_insert_with(|| ColumnBlockBuilder::new(&column_schema.data_type));
+                for i in 0..len / 2 {
+                    builder.append_block_range(column, i * 2, 1).unwrap();
+                }
+                let builder_map = builders.get_mut(1).unwrap();
+                let mut builder = builder_map
+                    .entry(column_schema.name.to_string())
+                    .or_insert_with(|| ColumnBlockBuilder::new(&column_schema.data_type));
+                for i in 0..len / 2 {
+                    builder.append_block_range(column, i * 2 + 1, 1).unwrap();
+                }
+            }
+
+            // for i in 0..len {
+            //     let idx = i % 2;
+            //     let builder_map = builders.get_mut(idx).unwrap();
+            //     for column_schema in schema.columns() {
+            //         let mut builder = builder_map
+            //             .entry(column_schema.name.to_string())
+            //             .or_insert_with(||
+            // ColumnBlockBuilder::new(&column_schema.data_type));
+            //         builder
+            //             .append_block_range(columns.get(&column_schema.name).unwrap(), i,
+            // 1)             .unwrap();
+            //     }
+            // }
+            let mut columns0 = HashMap::new();
+            for (k, mut v) in builders.remove(0) {
+                columns0.insert(k, v.build());
+            }
+            let mut columns1 = HashMap::new();
+
+            for (k, mut v) in builders.remove(0) {
+                columns1.insert(k, v.build());
+            }
+        }
+        println!("cost:{:?}", now.elapsed())
+    }
+
+    // convert write entry to column block
+    // split rows
+    // column block to bytes
+    #[test]
+    fn test_write_entry_to_column_block_wal() {
+        let (schema, tag_names, field_names, write_entry) = generate_write_entry();
+        let num = 100;
+
+        let now = std::time::Instant::now();
+
+        let mut decode_cost = Duration::new(0, 0);
+        let mut split_cost = Duration::new(0, 0);
+        let mut wal_encode_cost = Duration::new(0, 0);
+        for _ in 0..num {
+            let now0 = Instant::now();
+            let mut columns = write_entry_to_column_block(
+                "test_table",
+                &schema,
+                &tag_names,
+                &field_names,
+                write_entry.clone(),
+            )
+            .unwrap();
+            decode_cost += now0.elapsed();
+
+            let now0 = Instant::now();
+            let mut len = 0;
+            for (k, v) in &columns {
+                len = v.num_rows();
+                break;
+            }
+            let mut builders = vec![
+                HashMap::<String, ColumnBlockBuilder>::with_capacity(schema.num_columns()),
+                HashMap::<String, ColumnBlockBuilder>::with_capacity(schema.num_columns()),
+            ];
+
+            for column_schema in schema.columns() {
+                let column = columns.get(&column_schema.name).unwrap();
+                let builder_map = builders.get_mut(0).unwrap();
+                let mut builder = builder_map
+                    .entry(column_schema.name.to_string())
+                    .or_insert_with(|| ColumnBlockBuilder::new(&column_schema.data_type));
+                for i in 0..(len / 2) {
+                    builder.append_block_range(column, i * 2, 1).unwrap();
+                }
+                let builder_map = builders.get_mut(1).unwrap();
+                let mut builder = builder_map
+                    .entry(column_schema.name.to_string())
+                    .or_insert_with(|| ColumnBlockBuilder::new(&column_schema.data_type));
+                for i in 0..(len / 2) {
+                    builder.append_block_range(column, i * 2 + 1, 1).unwrap();
                 }
             }
             let mut columns0 = HashMap::new();
@@ -1242,9 +1575,177 @@ mod test {
             for (k, mut v) in builders.remove(0) {
                 columns1.insert(k, v.build());
             }
+            split_cost += now0.elapsed();
+
+            let now0 = Instant::now();
+            let mut column_blocks = Vec::with_capacity(schema.num_columns());
+            for column_schema in schema.columns() {
+                column_blocks.push(columns.remove(&column_schema.name).unwrap());
+            }
+            let record_batch_data =
+                RecordBatchData::new(schema.to_arrow_schema_ref(), column_blocks).unwrap();
+            let compress_options = CompressOptions::default();
+            let data =
+                ipc::encode_record_batch(&record_batch_data.arrow_record_batch, compress_options)
+                    .unwrap();
+            wal_encode_cost += now0.elapsed();
         }
 
+        println!("cost:{:?}, decode_cost:{decode_cost:?}, split_cost:{split_cost:?}, wal_encode_cost:{wal_encode_cost:?}", now.elapsed())
+    }
+
+    // convert write entry to column data
+    #[test]
+    fn test_write_entry_to_column_data() {
+        let (schema, tag_names, field_names, write_entry) = generate_write_entry();
+        let num = 100;
+
+        let now = std::time::Instant::now();
+        for _ in 0..num {
+            let column = write_entry_to_column(
+                "test_table",
+                &schema,
+                &tag_names,
+                &field_names,
+                write_entry.clone(),
+            )
+            .unwrap();
+        }
         println!("cost:{:?}", now.elapsed())
+    }
+
+    // convert write entry to column data
+    // split rows
+    #[test]
+    fn test_write_entry_to_column_data_split() {
+        let (schema, tag_names, field_names, write_entry) = generate_write_entry();
+        let num = 100;
+
+        let now = Instant::now();
+        for _ in 0..num {
+            let mut columns = write_entry_to_column(
+                "test_table",
+                &schema,
+                &tag_names,
+                &field_names,
+                write_entry.clone(),
+            )
+            .unwrap();
+            // println!("column:{columns:?}");
+            let mut len = 0;
+            for (k, v) in &columns {
+                len = v.len();
+                break;
+            }
+            // let mut split_columns = vec![
+            //     HashMap::<String, Column>::with_capacity(schema.num_columns()),
+            //     HashMap::<String, Column>::with_capacity(schema.num_columns()),
+            // ];
+
+            let mut column_map = HashMap::<String, Column>::with_capacity(schema.num_columns());
+            let mut column_map1 = HashMap::<String, Column>::with_capacity(schema.num_columns());
+
+            for column_schema in schema.columns() {
+                let column = columns.get_mut(&column_schema.name).unwrap();
+
+                let mut builder0 = column_map
+                    .entry(column_schema.name.to_string())
+                    .or_insert_with(|| Column::new(len / 2, column_schema.data_type));
+
+                let mut builder1 = column_map1
+                    .entry(column_schema.name.to_string())
+                    .or_insert_with(|| Column::new(len / 2, column_schema.data_type));
+                let mut dd = mem::replace(&mut column.data, ColumnData::F64(vec![]));
+                for (i, datum) in dd.into_iter().enumerate() {
+                    if i % 2 == 0 {
+                        builder0.append(datum);
+                    } else {
+                        builder1.append(datum);
+                    }
+                }
+            }
+        }
+        println!("cost:{:?}", now.elapsed())
+    }
+
+    // convert write entry to column data
+    // split rows
+    // wal
+    #[test]
+    fn test_write_entry_to_column_data_wal() {
+        let (schema, tag_names, field_names, write_entry) = generate_write_entry();
+        // println!("write_entry:{:?}", write_entry);
+        let num = 100;
+
+        let now = Instant::now();
+        let mut decode_cost = Duration::new(0, 0);
+        let mut split_cost = Duration::new(0, 0);
+        let mut wal_encode_cost = Duration::new(0, 0);
+
+        for _ in 0..num {
+            let now0 = Instant::now();
+            let mut columns = write_entry_to_column(
+                "test_table",
+                &schema,
+                &tag_names,
+                &field_names,
+                write_entry.clone(),
+            )
+            .unwrap();
+            // println!("column:{columns:?}");
+
+            decode_cost += now0.elapsed();
+
+            let mut columns0 = columns.clone();
+
+            let now0 = Instant::now();
+            let mut len = 0;
+            for (k, v) in &columns {
+                len = v.len();
+                break;
+            }
+            let mut column_map = HashMap::<String, Column>::with_capacity(schema.num_columns());
+            let mut column_map1 = HashMap::<String, Column>::with_capacity(schema.num_columns());
+
+            for column_schema in schema.columns() {
+                let mut column = columns.remove(&column_schema.name).unwrap();
+                let mut builder0 = column_map
+                    .entry(column_schema.name.to_string())
+                    .or_insert_with(|| Column::new(len / 2, column_schema.data_type));
+
+                let mut builder1 = column_map1
+                    .entry(column_schema.name.to_string())
+                    .or_insert_with(|| Column::new(len / 2, column_schema.data_type));
+                // let mut dd = mem::replace(&mut column.data, ColumnData::F64(vec![]));
+                for (i, datum) in column.data.into_iter().enumerate() {
+                    if i % 2 == 0 {
+                        builder0.append(datum);
+                    } else {
+                        builder1.append(datum);
+                    }
+                }
+            }
+            split_cost += now0.elapsed();
+
+            let now0 = Instant::now();
+            let mut tmp_columns = Vec::with_capacity(schema.num_columns());
+            for column_schema in schema.columns() {
+                tmp_columns.push(
+                    columns0
+                        .remove(&column_schema.name)
+                        .unwrap()
+                        .to_arrow()
+                        .unwrap(),
+                );
+            }
+
+            let record_batch =
+                RecordBatch::try_new(schema.to_arrow_schema_ref(), tmp_columns).unwrap();
+            let compress_options = CompressOptions::default();
+            let data = ipc::encode_record_batch(&record_batch, compress_options).unwrap();
+            wal_encode_cost += now0.elapsed();
+        }
+        println!("cost:{:?}, decode_cost:{decode_cost:?}, split_cost:{split_cost:?}, wal_encode_cost:{wal_encode_cost:?}", now.elapsed())
     }
 
     fn test_convert() {

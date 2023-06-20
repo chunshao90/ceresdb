@@ -104,12 +104,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub struct RecordBatchData {
-    arrow_record_batch: ArrowRecordBatch,
+    pub arrow_record_batch: ArrowRecordBatch,
     column_blocks: Vec<ColumnBlock>,
 }
 
 impl RecordBatchData {
-    fn new(arrow_schema: ArrowSchemaRef, column_blocks: Vec<ColumnBlock>) -> Result<Self> {
+    pub fn new(arrow_schema: ArrowSchemaRef, column_blocks: Vec<ColumnBlock>) -> Result<Self> {
         let arrays = column_blocks
             .iter()
             .map(|column| column.to_arrow_array_ref())

@@ -31,6 +31,7 @@ lazy_static = { workspace = true }
 log = { workspace = true }
 logger = { workspace = true }
 meta_client = { workspace = true }
+num-traits = "0.2"
 paste = { workspace = true }
 prom-remote-api = { workspace = true, features = ["warp"] }
 prometheus = { workspace = true }
@@ -52,6 +53,8 @@ warp = "0.3"
 zstd = { workspace = true }
 
 [dev-dependencies]
+datafusion = { workspace = true }
 json_pretty = "0.1.2"
 query_frontend = { workspace = true, features = ["test"] }
+rand = "0.8.3"
 system_catalog = { workspace = true }

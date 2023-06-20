@@ -5,6 +5,8 @@
 
 #![feature(trait_alias)]
 
+mod bitset;
+mod column;
 pub mod context;
 mod error;
 mod error_util;
@@ -19,6 +21,7 @@ pub mod instance;
 pub mod limiter;
 mod read;
 pub mod schema_config_provider;
+mod string;
 mod util;
 mod write;
 

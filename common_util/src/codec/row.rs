@@ -1,4 +1,4 @@
-// Copyright 2022 CeresDB Project Authors. Licensed under Apache-2.0.
+// Copyright 2022-2023 CeresDB Project Authors. Licensed under Apache-2.0.
 
 //! Row encoding utils
 //!
@@ -37,11 +37,11 @@ pub enum Error {
 define_result!(Error);
 
 /// Compact row encoder for wal.
-struct WalRowEncoder<'a> {
+pub struct WalRowEncoder<'a> {
     /// Schema of table
-    table_schema: &'a Schema,
+    pub table_schema: &'a Schema,
     /// Index of table column in writer
-    index_in_writer: &'a IndexInWriterSchema,
+    pub index_in_writer: &'a IndexInWriterSchema,
 }
 
 impl<'a> Encoder<Row> for WalRowEncoder<'a> {
