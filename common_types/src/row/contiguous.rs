@@ -1,4 +1,4 @@
-// Copyright 2022 CeresDB Project Authors. Licensed under Apache-2.0.
+// Copyright 2022-2023 CeresDB Project Authors. Licensed under Apache-2.0.
 
 //! Contiguous row.
 
@@ -273,6 +273,7 @@ impl<'a, T: RowBuffer + 'a> ContiguousRowWriter<'a, T> {
                 let value_buf = v.to_ne_bytes();
                 Self::write_slice_to_offset(inner, datum_offset, &value_buf);
             }
+            _ => todo!(),
         }
 
         Ok(())

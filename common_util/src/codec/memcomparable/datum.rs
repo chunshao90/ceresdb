@@ -1,4 +1,4 @@
-// Copyright 2022 CeresDB Project Authors. Licensed under Apache-2.0.
+// Copyright 2022-2023 CeresDB Project Authors. Licensed under Apache-2.0.
 
 //! Datum comparable codec
 
@@ -90,6 +90,7 @@ impl Encoder<Datum> for MemComparable {
                 kind: DatumKind::Float,
             }
             .fail(),
+            _ => todo!(),
         }
     }
 
@@ -113,6 +114,7 @@ impl Encoder<Datum> for MemComparable {
             Datum::Boolean(v) => self.estimate_encoded_size(&(u64::from(*v))),
             // Unsupported kind, but we return 1
             Datum::Double(_) | Datum::Float(_) => 1,
+            _ => todo!(),
         }
     }
 }
@@ -210,6 +212,7 @@ impl DecodeTo<Datum> for MemComparable {
                 }
                 .fail();
             }
+            _ => todo!(),
         }
         Ok(())
     }

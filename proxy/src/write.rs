@@ -1130,10 +1130,8 @@ fn write_entry_to_column(
         )?;
 
         for _ in 0..write_series_entry.field_groups.len() {
-            // println!("xx tag_name:{}, column:{:?}", tag_name, column );
             column.append(datum.clone());
         }
-        // println!("xx tag_name:{}, column:{:?}", tag_name, column );
         columns.insert(tag_name.to_string(), column);
     }
 
@@ -1232,13 +1230,40 @@ fn convert_proto_value_to_datum(
     }
 }
 
+pub fn convert_datum_to_value(val: Datum) -> Value {
+    let value = match val {
+        Datum::Null => None,
+        Datum::Timestamp(v) => Some(value::Value::TimestampValue(v.as_i64())),
+        Datum::Double(v) => Some(value::Value::Float64Value(v)),
+        Datum::Float(v) => Some(value::Value::Float32Value(v)),
+        Datum::Varbinary(v) => Some(value::Value::VarbinaryValue(v.to_vec())),
+        Datum::String(v) => Some(value::Value::StringValue(v.to_string())),
+        Datum::StringRaw(v) => Some(value::Value::StringValue(v)),
+        Datum::UInt64(v) => Some(value::Value::Uint64Value(v)),
+        Datum::UInt32(v) => Some(value::Value::Uint32Value(v)),
+        Datum::UInt16(v) => Some(value::Value::Uint16Value(v.into())),
+        Datum::UInt8(v) => Some(value::Value::Uint8Value(v.into())),
+        Datum::Int64(v) => Some(value::Value::Int64Value(v)),
+        Datum::Int32(v) => Some(value::Value::Int32Value(v)),
+        Datum::Int16(v) => Some(value::Value::Int16Value(v.into())),
+        Datum::Int8(v) => Some(value::Value::Int8Value(v.into())),
+        Datum::Boolean(v) => Some(value::Value::BoolValue(v)),
+        _ => todo!(),
+    };
+
+    Value { value }
+}
+
 #[cfg(test)]
 mod test {
     use std::{mem, time::Duration};
 
     use arrow::record_batch::RecordBatch;
     use arrow_ext::{ipc, ipc::CompressOptions};
-    use ceresdbproto::storage::{value, Field, FieldGroup, Tag, Value, WriteSeriesEntry};
+    use ceresdbproto::storage::{
+        value, Column as ColumnPB, ColumnData as ColumnDataPB, Field, FieldGroup, Tag, Value,
+        WriteSeriesEntry,
+    };
     use common_types::{
         bytes::ByteVec,
         column_schema::{self},
@@ -1637,10 +1662,6 @@ mod test {
                 len = v.len();
                 break;
             }
-            // let mut split_columns = vec![
-            //     HashMap::<String, Column>::with_capacity(schema.num_columns()),
-            //     HashMap::<String, Column>::with_capacity(schema.num_columns()),
-            // ];
 
             let mut column_map = HashMap::<String, Column>::with_capacity(schema.num_columns());
             let mut column_map1 = HashMap::<String, Column>::with_capacity(schema.num_columns());
@@ -1674,7 +1695,6 @@ mod test {
     #[test]
     fn test_write_entry_to_column_data_wal() {
         let (schema, tag_names, field_names, write_entry) = generate_write_entry();
-        // println!("write_entry:{:?}", write_entry);
         let num = 100;
 
         let now = Instant::now();
@@ -1692,7 +1712,6 @@ mod test {
                 write_entry.clone(),
             )
             .unwrap();
-            // println!("column:{columns:?}");
 
             decode_cost += now0.elapsed();
 
@@ -1743,6 +1762,83 @@ mod test {
                 RecordBatch::try_new(schema.to_arrow_schema_ref(), tmp_columns).unwrap();
             let compress_options = CompressOptions::default();
             let data = ipc::encode_record_batch(&record_batch, compress_options).unwrap();
+            wal_encode_cost += now0.elapsed();
+        }
+        println!("cost:{:?}, decode_cost:{decode_cost:?}, split_cost:{split_cost:?}, wal_encode_cost:{wal_encode_cost:?}", now.elapsed())
+    }
+
+    // convert write entry to column data
+    // split rows
+    // wal
+    #[test]
+    fn test_write_entry_to_column_data_wal_pb() {
+        let (schema, tag_names, field_names, write_entry) = generate_write_entry();
+        let num = 100;
+
+        let now = Instant::now();
+        let mut decode_cost = Duration::new(0, 0);
+        let mut split_cost = Duration::new(0, 0);
+        let mut wal_encode_cost = Duration::new(0, 0);
+
+        for _ in 0..num {
+            let now0 = Instant::now();
+            let mut columns = write_entry_to_column(
+                "test_table",
+                &schema,
+                &tag_names,
+                &field_names,
+                write_entry.clone(),
+            )
+            .unwrap();
+
+            decode_cost += now0.elapsed();
+
+            let mut columns0 = columns.clone();
+
+            let now0 = Instant::now();
+            let mut len = 0;
+            for (k, v) in &columns {
+                len = v.len();
+                break;
+            }
+            let mut column_map = HashMap::<String, Column>::with_capacity(schema.num_columns());
+            let mut column_map1 = HashMap::<String, Column>::with_capacity(schema.num_columns());
+
+            for column_schema in schema.columns() {
+                let mut column = columns.remove(&column_schema.name).unwrap();
+                let mut builder0 = column_map
+                    .entry(column_schema.name.to_string())
+                    .or_insert_with(|| Column::new(len / 2, column_schema.data_type));
+
+                let mut builder1 = column_map1
+                    .entry(column_schema.name.to_string())
+                    .or_insert_with(|| Column::new(len / 2, column_schema.data_type));
+                // let mut dd = mem::replace(&mut column.data, ColumnData::F64(vec![]));
+                for (i, datum) in column.data.into_iter().enumerate() {
+                    if i % 2 == 0 {
+                        builder0.append(datum);
+                    } else {
+                        builder1.append(datum);
+                    }
+                }
+            }
+            split_cost += now0.elapsed();
+
+            let now0 = Instant::now();
+            let mut pbColumnData = ColumnDataPB {
+                data: HashMap::with_capacity(schema.num_columns()),
+            };
+            for (k, v) in columns0 {
+                let mut pbColumn = ColumnPB {
+                    data: Vec::with_capacity(len),
+                };
+
+                for datum in v.data {
+                    pbColumn.data.push(convert_datum_to_value(datum));
+                }
+                pbColumnData.data.insert(k, pbColumn);
+            }
+
             wal_encode_cost += now0.elapsed();
         }
         println!("cost:{:?}, decode_cost:{decode_cost:?}, split_cost:{split_cost:?}, wal_encode_cost:{wal_encode_cost:?}", now.elapsed())

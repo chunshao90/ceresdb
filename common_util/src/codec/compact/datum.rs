@@ -1,4 +1,4 @@
-// Copyright 2022 CeresDB Project Authors. Licensed under Apache-2.0.
+// Copyright 2022-2023 CeresDB Project Authors. Licensed under Apache-2.0.
 
 //! Datum compact codec
 
@@ -89,6 +89,7 @@ impl Encoder<Datum> for MemCompactEncoder {
                 buf.try_put_u8(consts::VARINT_FLAG).context(EncodeKey)?;
                 self.encode(buf, v)
             }
+            _ => todo!(),
         }
     }
 
@@ -112,6 +113,7 @@ impl Encoder<Datum> for MemCompactEncoder {
             Datum::Boolean(v) => self.estimate_encoded_size(&(u64::from(*v))),
             Datum::Date(v) => self.estimate_encoded_size(&(i64::from(*v))),
             Datum::Time(v) => self.estimate_encoded_size(v),
+            _ => todo!(),
         }
     }
 }
@@ -213,6 +215,7 @@ impl DecodeTo<Datum> for MemCompactDecoder {
                 Self::ensure_flag(consts::VARINT_FLAG, actual)?;
                 self.decode_to(buf, v)?;
             }
+            _ => todo!(),
         }
         Ok(())
     }

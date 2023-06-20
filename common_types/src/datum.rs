@@ -1,4 +1,4 @@
-// Copyright 2022 CeresDB Project Authors. Licensed under Apache-2.0.
+// Copyright 2022-2023 CeresDB Project Authors. Licensed under Apache-2.0.
 
 //! Datum holds different kind of data
 
@@ -381,6 +381,7 @@ pub enum Datum {
     ///
     /// No more than 2G (size of i32)
     String(StringBytes),
+    StringRaw(String),
     /// Map to arrow::datatypes::DataType::UInt64
     UInt64(u64),
     UInt32(u32),
@@ -433,7 +434,7 @@ impl Datum {
             Datum::Double(_) => DatumKind::Double,
             Datum::Float(_) => DatumKind::Float,
             Datum::Varbinary(_) => DatumKind::Varbinary,
-            Datum::String(_) => DatumKind::String,
+            Datum::String(_)|Datum::StringRaw(_) => DatumKind::String,
             Datum::UInt64(_) => DatumKind::UInt64,
             Datum::UInt32(_) => DatumKind::UInt32,
             Datum::UInt16(_) => DatumKind::UInt16,
@@ -445,6 +446,7 @@ impl Datum {
             Datum::Boolean(_) => DatumKind::Boolean,
             Datum::Date(_) => DatumKind::Date,
             Datum::Time(_) => DatumKind::Time,
+            _ => todo!(),
         }
     }
 
@@ -468,6 +470,7 @@ impl Datum {
             Datum::Boolean(v) => *v as u64,
             Datum::Date(v) => *v as u64,
             Datum::Time(v) => *v as u64,
+            _ => todo!(),
         }
     }
 
@@ -559,6 +562,7 @@ impl Datum {
             | Datum::Timestamp(_)
             | Datum::Varbinary(_)
             | Datum::String(_) => None,
+            _ => todo!(),
         }
     }
 
@@ -621,6 +625,7 @@ impl Datum {
             }
             Datum::Varbinary(v) => f(v.as_ref()),
             Datum::String(v) => f(v.as_bytes()),
+            Datum::StringRaw(v) => f(v.as_bytes()),
             Datum::Date(v) => {
                 let arr = v.to_le_bytes();
                 f(arr.as_slice())
@@ -657,6 +662,7 @@ impl Datum {
             Datum::String(string) => string.as_bytes().to_vec(),
             Datum::Date(v) => v.to_le_bytes().to_vec(),
             Datum::Time(v) => v.to_le_bytes().to_vec(),
+            _ => todo!(),
         }
     }
 
@@ -684,6 +690,7 @@ impl Datum {
             Datum::Boolean(v) => Some(Datum::Boolean(!v)),
             Datum::Date(_) => None,
             Datum::Time(_) => None,
+            _ => todo!(),
         }
     }
 
@@ -713,6 +720,7 @@ impl Datum {
                 .to_string(),
 
             Datum::Time(v) => Datum::format_datum_time(v),
+            _ => todo!(),
         }
     }
 
@@ -867,6 +875,7 @@ impl Datum {
             Datum::Int16(v) => DatumView::Int16(*v),
             Datum::Int8(v) => DatumView::Int8(*v),
             Datum::Boolean(v) => DatumView::Boolean(*v),
+            _ => todo!(),
         }
     }
 }
@@ -959,6 +968,7 @@ impl Serialize for Datum {
             Datum::Boolean(v) => serializer.serialize_bool(*v),
             Datum::Date(v) => serializer.serialize_str(Self::format_datum_date(v).as_ref()),
             Datum::Time(v) => serializer.serialize_str(Datum::format_datum_time(v).as_ref()),
+            _ => todo!(),
         }
     }
 }
@@ -1180,6 +1190,7 @@ pub mod arrow_convert {
                 Datum::Boolean(v) => Some(ScalarValue::Boolean(Some(*v))),
                 Datum::Date(v) => Some(ScalarValue::Date32(Some(*v))),
                 Datum::Time(v) => Some(ScalarValue::Time64Nanosecond(Some(*v))),
+                _ => todo!(),
             }
         }
 
