@@ -204,7 +204,7 @@ impl Column {
             DatumKind::UInt64 => ColumnData::U64(vec![0; row_count]),
             DatumKind::Float => ColumnData::F64(vec![0.0; row_count]),
             DatumKind::Int64 | DatumKind::Timestamp => ColumnData::I64(vec![0; row_count]),
-            DatumKind::String => ColumnData::String(vec![StringBytes::new(); row_count]),
+            DatumKind::String => ColumnData::StringRaw(vec!["".to_string(); row_count]),
             _ => todo!(),
         };
 

@@ -1139,9 +1139,18 @@ fn write_entry_to_column(
     let mut field_name_index: HashMap<String, usize> = HashMap::new();
     for (i, field_group) in write_series_entry.field_groups.into_iter().enumerate() {
         // timestamp
-        let mut timestamp_column = columns
-            .entry(schema.timestamp_name().to_string())
-            .or_insert_with(|| Column::new(row_count, DatumKind::Timestamp));
+        // let mut timestamp_column = columns
+        //     .entry(schema.timestamp_name().to_string())
+        //     .or_insert_with(|| Column::new(row_count, DatumKind::Timestamp));
+
+        let timestamp_column = if let Some(column) = columns.get_mut(schema.timestamp_name()) {
+            column
+        } else {
+            let mut column = Column::new(row_count, DatumKind::Timestamp);
+            columns.insert(schema.timestamp_name().to_string(), column);
+            columns.get_mut(schema.timestamp_name()).unwrap()
+        };
+
         timestamp_column.append(Datum::Timestamp(Timestamp::new(field_group.timestamp)));
 
         for field in field_group.fields {
@@ -1183,10 +1192,17 @@ fn write_entry_to_column(
                             "Field({field_name}) value type is not supported, table:{table_name}"
                         ),
                     })?;
-                let mut builder = columns
-                    .entry(field_name.to_string())
-                    .or_insert_with(|| Column::new(row_count, column_schema.data_type));
-                builder.append(convert_proto_value_to_datum(
+                // let mut builder = columns
+                //     .entry(field_name.to_string())
+                //     .or_insert_with(|| Column::new(row_count, column_schema.data_type));
+                let column = if let Some(column) = columns.get_mut(field_name) {
+                    column
+                } else {
+                    let mut column = Column::new(row_count, column_schema.data_type);
+                    columns.insert(field_name.to_string(), column);
+                    columns.get_mut(field_name).unwrap()
+                };
+                column.append(convert_proto_value_to_datum(
                     table_name,
                     field_name,
                     field_value,
@@ -1277,6 +1293,7 @@ mod test {
         row::{encode_row_group_for_wal, WalRowEncoder},
         Encoder,
     };
+    use prost::Message;
     use system_catalog::sys_catalog_table::TIMESTAMP_COLUMN_NAME;
 
     use super::*;
@@ -1779,6 +1796,7 @@ mod test {
         let mut decode_cost = Duration::new(0, 0);
         let mut split_cost = Duration::new(0, 0);
         let mut wal_encode_cost = Duration::new(0, 0);
+        let mut wal_encode_pb_cost = Duration::new(0, 0);
 
         for _ in 0..num {
             let now0 = Instant::now();
@@ -1840,8 +1858,13 @@ mod test {
             }
 
             wal_encode_cost += now0.elapsed();
+
+            let now0 = Instant::now();
+            let mut buf = Vec::new();
+            pbColumnData.encode(&mut buf).unwrap();
+            wal_encode_pb_cost += now0.elapsed();
         }
-        println!("cost:{:?}, decode_cost:{decode_cost:?}, split_cost:{split_cost:?}, wal_encode_cost:{wal_encode_cost:?}", now.elapsed())
+        println!("cost:{:?}, decode_cost:{decode_cost:?}, split_cost:{split_cost:?}, wal_encode_cost:{wal_encode_cost:?}, wal_encode_pb_cost:{wal_encode_pb_cost:?}", now.elapsed())
     }
 
     fn test_convert() {

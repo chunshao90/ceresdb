@@ -434,7 +434,7 @@ impl Datum {
             Datum::Double(_) => DatumKind::Double,
             Datum::Float(_) => DatumKind::Float,
             Datum::Varbinary(_) => DatumKind::Varbinary,
-            Datum::String(_)|Datum::StringRaw(_) => DatumKind::String,
+            Datum::String(_) | Datum::StringRaw(_) => DatumKind::String,
             Datum::UInt64(_) => DatumKind::UInt64,
             Datum::UInt32(_) => DatumKind::UInt32,
             Datum::UInt16(_) => DatumKind::UInt16,
