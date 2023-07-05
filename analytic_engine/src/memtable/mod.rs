@@ -175,6 +175,14 @@ pub trait MemTable {
         schema: &Schema,
     ) -> Result<()>;
 
+    // fn put(
+    //     &self,
+    //     ctx: &mut PutContext,
+    //     sequence: KeySequence,
+    //     row: &Row,
+    //     schema: &Schema,
+    // ) -> Result<()>;
+
     /// Scan the memtable.
     ///
     /// Returns the data in columnar format. The returned rows is guaranteed

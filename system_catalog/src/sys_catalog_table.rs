@@ -344,30 +344,30 @@ impl SysCatalogTable {
 
         let row_group = request.clone().into_row_group(self.table.schema())?;
 
-        let mut columns = HashMap::with_capacity(self.table.schema().num_columns());
-        {
-            let mut column = Column::new(1, DatumKind::Varbinary);
-            column
-                .append(value::Value::VarbinaryValue(
-                    request.to_key().unwrap().to_vec(),
-                ))
-                .unwrap();
-            columns.insert(KEY_COLUMN_NAME.to_string(), column);
-        }
-
-        {
-            let mut column = Column::new(1, DatumKind::Int64);
-            column.append(value::Value::TimestampValue(0)).unwrap();
-            columns.insert(TIMESTAMP_COLUMN_NAME.to_string(), column);
-        }
-
-        {
-            let mut column = Column::new(1, DatumKind::Varbinary);
-            column
-                .append(value::Value::VarbinaryValue(request.into_bytes().to_vec()))
-                .unwrap();
-            columns.insert(VALUE_COLUMN_NAME.to_string(), column);
-        }
+        // let mut columns = HashMap::with_capacity(self.table.schema().num_columns());
+        // {
+        //     let mut column = Column::new(1, DatumKind::Varbinary);
+        //     column
+        //         .append(value::Value::VarbinaryValue(
+        //             request.to_key().unwrap().to_vec(),
+        //         ))
+        //         .unwrap();
+        //     columns.insert(KEY_COLUMN_NAME.to_string(), column);
+        // }
+        //
+        // {
+        //     let mut column = Column::new(1, DatumKind::Int64);
+        //     column.append(value::Value::TimestampValue(0)).unwrap();
+        //     columns.insert(TIMESTAMP_COLUMN_NAME.to_string(), column);
+        // }
+        //
+        // {
+        //     let mut column = Column::new(1, DatumKind::Varbinary);
+        //     column
+        //         .append(value::Value::VarbinaryValue(request.into_bytes().to_vec()))
+        //         .unwrap();
+        //     columns.insert(VALUE_COLUMN_NAME.to_string(), column);
+        // }
 
         // for column_schema in self.table.schema().columns() {
         //     let mut column = Column::new(1,column_schema.data_type);
@@ -377,7 +377,7 @@ impl SysCatalogTable {
 
         let write_req = WriteRequest {
             row_group,
-            columns: Some(columns),
+            columns: None,
         };
         self.table.write(write_req).await.context(PersistCatalog)?;
 
@@ -390,34 +390,34 @@ impl SysCatalogTable {
 
         let row_group = request.clone().into_row_group(self.table.schema())?;
 
-        let mut columns = HashMap::with_capacity(self.table.schema().num_columns());
-        {
-            let mut column = Column::new(1, DatumKind::Varbinary);
-            column
-                .append(value::Value::VarbinaryValue(
-                    request.to_key().unwrap().to_vec(),
-                ))
-                .unwrap();
-            columns.insert(KEY_COLUMN_NAME.to_string(), column);
-        }
-
-        {
-            let mut column = Column::new(1, DatumKind::Int64);
-            column.append(value::Value::TimestampValue(0)).unwrap();
-            columns.insert(TIMESTAMP_COLUMN_NAME.to_string(), column);
-        }
-
-        {
-            let mut column = Column::new(1, DatumKind::Varbinary);
-            column
-                .append(value::Value::VarbinaryValue(request.into_bytes().to_vec()))
-                .unwrap();
-            columns.insert(VALUE_COLUMN_NAME.to_string(), column);
-        }
+        // let mut columns = HashMap::with_capacity(self.table.schema().num_columns());
+        // {
+        //     let mut column = Column::new(1, DatumKind::Varbinary);
+        //     column
+        //         .append(value::Value::VarbinaryValue(
+        //             request.to_key().unwrap().to_vec(),
+        //         ))
+        //         .unwrap();
+        //     columns.insert(KEY_COLUMN_NAME.to_string(), column);
+        // }
+        //
+        // {
+        //     let mut column = Column::new(1, DatumKind::Int64);
+        //     column.append(value::Value::TimestampValue(0)).unwrap();
+        //     columns.insert(TIMESTAMP_COLUMN_NAME.to_string(), column);
+        // }
+        //
+        // {
+        //     let mut column = Column::new(1, DatumKind::Varbinary);
+        //     column
+        //         .append(value::Value::VarbinaryValue(request.into_bytes().to_vec()))
+        //         .unwrap();
+        //     columns.insert(VALUE_COLUMN_NAME.to_string(), column);
+        // }
 
         let write_req = WriteRequest {
             row_group,
-            columns: Some(columns),
+            columns: None,
         };
         self.table.write(write_req).await.context(PersistSchema)?;
 

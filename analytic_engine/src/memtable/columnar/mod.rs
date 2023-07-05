@@ -6,7 +6,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use common_types::{column::Column, schema::Schema, SequenceNumber};
+use common_types::{column::Column, row::Row, schema::Schema, SequenceNumber};
 use log::trace;
 use snafu::ensure;
 
@@ -50,11 +50,11 @@ impl MemTable for ColumnarMemTable {
         columns: HashMap<String, Column>,
         schema: &Schema,
     ) -> Result<()> {
-        trace!(
-            "skiplist put row, sequence:{:?}, columns:{:?}",
-            sequence,
-            columns
-        );
+        // trace!(
+        //     "skiplist put row, sequence:{:?}, columns:{:?}",
+        //     sequence,
+        //     columns
+        // );
         let mut memtable = self.memtable.write().unwrap();
         for (k, v) in columns {
             if let Some(column) = memtable.get_mut(&k) {
@@ -66,6 +66,42 @@ impl MemTable for ColumnarMemTable {
 
         Ok(())
     }
+
+    // fn put(
+    //     &self,
+    //     ctx: &mut PutContext,
+    //     sequence: KeySequence,
+    //     row: &Row,
+    //     schema: &Schema,
+    // ) -> Result<()> {
+    //     let mut memtable = self.memtable.write().unwrap();
+    //     for (index_in_table,column_schema) in schema.columns().iter().enumerate()
+    // {         if let Some(writer_index) =
+    // ctx.index_in_writer.column_index_in_writer(index_in_table)         {
+    //             let datum = &row[writer_index];
+    //             let column = if let Some(column) =
+    //                 memtable.get_mut(&column_schema.name)
+    //             {
+    //                 column
+    //             } else {
+    //                 let mut column = Column::new(row_count,
+    // column_schema.data_type);                 memtable.insert(
+    //                     column_schema.name.to_string(),
+    //                     column,
+    //                 );
+    //                 memtable
+    //                     .get_mut(&column_schema.name)
+    //                     .unwrap()
+    //             };
+    //
+    //             // Write datum bytes to the buffer.
+    //             column.append_datum_ref(datum).unwrap();
+    //         }
+    //         // Column not in row is already filled by null.
+    //     }
+    //
+    //     Ok(())
+    // }
 
     fn scan(&self, ctx: ScanContext, request: ScanRequest) -> Result<ColumnarIterPtr> {
         // debug!(

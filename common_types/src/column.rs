@@ -199,6 +199,7 @@ impl Column {
     pub fn append_column(&mut self, mut column: Column) {
         assert_eq!(self.datum_kind, column.datum_kind);
         self.valid.append_set(column.len());
+        self.to_insert += column.len();
         match (&mut self.data, &mut column.data) {
             (ColumnData::F64(data), ColumnData::F64(ref mut column_data)) => {
                 data.append(column_data)
@@ -264,6 +265,32 @@ impl Column {
             }
             (ColumnData::Bool(data), Datum::Boolean(v)) => {
                 if v {
+                    data.set(self.to_insert);
+                }
+            }
+
+            (c, v) => println!("c: {:?}, v: {:?}", c, v),
+        }
+        self.valid.set(self.to_insert);
+        self.to_insert += 1;
+        Ok(())
+    }
+
+    pub fn append_datum_ref(&mut self, value: &Datum) -> Result<()> {
+        match (&mut self.data, value) {
+            (ColumnData::F64(data), Datum::Double(v)) => data[self.to_insert] = *v,
+            (ColumnData::I64(data), Datum::Int64(v)) => data[self.to_insert] = *v,
+            (ColumnData::I64(data), Datum::Timestamp(v)) => data[self.to_insert] = v.as_i64(),
+            (ColumnData::U64(data), Datum::UInt64(v)) => data[self.to_insert] = *v,
+            (ColumnData::String(data), Datum::String(v)) => data[self.to_insert] = v.to_string(),
+            (ColumnData::StringBytes(data), Datum::String(v)) => {
+                data[self.to_insert] = StringBytes::from(v.as_str())
+            }
+            (ColumnData::Varbinary(data), Datum::Varbinary(v)) => {
+                data[self.to_insert] = v.to_vec();
+            }
+            (ColumnData::Bool(data), Datum::Boolean(v)) => {
+                if *v {
                     data.set(self.to_insert);
                 }
             }

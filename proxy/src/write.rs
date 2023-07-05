@@ -755,36 +755,36 @@ fn write_table_request_to_insert_plan(
     write_table_req: WriteTableRequest,
 ) -> Result<InsertPlan> {
     let schema = table.schema();
-    let columns = write_entry_to_columns(
-        &write_table_req.table,
-        &schema,
-        &write_table_req.tag_names,
-        &write_table_req.field_names,
-        write_table_req.entries,
-    )?;
-    // let mut rows_total = Vec::new();
-    // for write_entry in write_table_req.entries {
-    //     let mut rows = write_entry_to_rows(
-    //         &write_table_req.table,
-    //         &schema,
-    //         &write_table_req.tag_names,
-    //         &write_table_req.field_names,
-    //         write_entry,
-    //     )?;
-    //     rows_total.append(&mut rows);
-    // }
-    // // The row group builder will checks nullable.
-    // let row_group = RowGroupBuilder::with_rows(schema, rows_total)
-    //     .box_err()
-    //     .with_context(|| ErrWithCause {
-    //         code: StatusCode::INTERNAL_SERVER_ERROR,
-    //         msg: format!("Failed to build row group, table:{}", table.name()),
-    //     })?
-    //     .build();
+    // let columns = write_entry_to_columns(
+    //     &write_table_req.table,
+    //     &schema,
+    //     &write_table_req.tag_names,
+    //     &write_table_req.field_names,
+    //     write_table_req.entries,
+    // )?;
+    let mut rows_total = Vec::new();
+    for write_entry in write_table_req.entries {
+        let mut rows = write_entry_to_rows(
+            &write_table_req.table,
+            &schema,
+            &write_table_req.tag_names,
+            &write_table_req.field_names,
+            write_entry,
+        )?;
+        rows_total.append(&mut rows);
+    }
+    // The row group builder will checks nullable.
+    let row_group = RowGroupBuilder::with_rows(schema, rows_total)
+        .box_err()
+        .with_context(|| ErrWithCause {
+            code: StatusCode::INTERNAL_SERVER_ERROR,
+            msg: format!("Failed to build row group, table:{}", table.name()),
+        })?
+        .build();
     Ok(InsertPlan {
         table,
-        rows: RowGroupBuilder::new(schema).build(),
-        columns,
+        rows: row_group,
+        columns: HashMap::new(),
         default_value_map: BTreeMap::new(),
     })
 }

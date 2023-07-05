@@ -172,7 +172,6 @@ impl MemTableForWrite {
                 //
                 // // Collect the timestamp of this row.
                 // v.sampler.collect(timestamp).context(CollectTimestamp)?;
-                todo!();
 
                 Ok(())
             }
