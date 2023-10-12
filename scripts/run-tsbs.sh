@@ -21,16 +21,32 @@ export WRITE_BATCH_SIZE=${WRITE_BATCH_SIZE:-500}
 # Where generated data stored
 export DATA_FILE=${DATA_FILE:-data.out}
 # How many values in host tag
-export HOST_NUM=${HOST_NUM:-10000}
+export HOST_NUM=${HOST_NUM:-4000}
 
 # Used for `generate_queries.sh` start.
-export TS_START="2022-09-05T00:00:00Z"
-export TS_END="2022-09-05T12:00:01Z"
+export TS_START="2023-06-11T00:00:00Z"
+export TS_END="2023-06-14T00:00:00Z"
 export EXE_FILE_NAME=${CURR_DIR}/tsbs/tsbs_generate_queries
 # where generated queries stored
 export BULK_DATA_DIR=${CURR_DIR}/tsbs/data
 export FORMATS=ceresdb
+#export QUERY_TYPES="\
+#single-groupby-1-1-1 \
+#single-groupby-1-1-12 \
+#single-groupby-1-8-1 \
+#single-groupby-5-1-1 \
+#single-groupby-5-1-12 \
+#single-groupby-5-8-1"
+
 export QUERY_TYPES="\
+cpu-max-all-1 \
+cpu-max-all-8 \
+double-groupby-1 \
+double-groupby-5 \
+double-groupby-all \
+groupby-orderby-limit \
+high-cpu-1 \
+high-cpu-all \
 single-groupby-1-1-1 \
 single-groupby-1-1-12 \
 single-groupby-1-8-1 \
@@ -77,11 +93,10 @@ if [ ! -f ${DATA_FILE} ]; then
   ./tsbs_generate_data \
     --use-case="cpu-only" \
     --seed=123 \
-    --initial-scale=${HOST_NUM} \
     --scale=${HOST_NUM} \
     --timestamp-start="${TS_START}" \
     --timestamp-end="${TS_END}" \
-    --log-interval="60s" \
+    --log-interval="10s" \
     --format="${FORMATS}" > ${DATA_FILE}
 fi
 
@@ -94,7 +109,11 @@ fi
 
 # Run queries against ceresdb
 # TODO: support more kinds of queries besides 5-8-1.
-cat ${BULK_DATA_DIR}/ceresdb-single-groupby-5-8-1-queries.gz | gunzip | ./tsbs_run_queries_ceresdb --ceresdb-addr=${CERESDB_ADDR} | tee ${LOG_DIR}/5-8-1.log
+for QUERY_TYPE in ${QUERY_TYPES}; do
+  cat ${BULK_DATA_DIR}/ceresdb-${QUERY_TYPE}-queries.gz | gunzip | ./tsbs_run_queries_ceresdb --ceresdb-addr=${CERESDB_ADDR} | tee ${LOG_DIR}/${QUERY_TYPE}.log
+
+done
+#cat ${BULK_DATA_DIR}/ceresdb-single-groupby-5-8-1-queries.gz | gunzip | ./tsbs_run_queries_ceresdb --ceresdb-addr=${CERESDB_ADDR} | tee ${LOG_DIR}/5-8-1.log
 
 # Clean the result file
 rm ${RESULT_FILE}
