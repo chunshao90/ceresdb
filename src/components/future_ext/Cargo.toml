@@ -31,8 +31,8 @@ workspace = true
 workspace = true
 
 [dependencies]
-futures = { workspace = true }
-lazy_static = { workspace = true }
-prometheus = { workspace = true }
-runtime = { workspace = true }
+futures.workspace = true
+lazy_static.workspace = true
+prometheus.workspace = true
+runtime.workspace = true
 tokio = { workspace = true, features = ["time"] }

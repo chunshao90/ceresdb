@@ -85,6 +85,7 @@ members = [
 
 [workspace.dependencies]
 alloc_tracker = { path = "src/components/alloc_tracker" }
+arc-swap = "1.6.0"
 arrow = { version = "43.0.0", features = ["prettyprint"] }
 arrow_ipc = { version = "43.0.0" }
 arrow_ext = { path = "src/components/arrow_ext" }

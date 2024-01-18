@@ -31,18 +31,18 @@ workspace = true
 workspace = true
 
 [dependencies]
-async-trait = { workspace = true }
-catalog = { workspace = true }
-cluster = { workspace = true }
-common_types = { workspace = true }
-generic_error = { workspace = true }
-logger = { workspace = true }
-macros = { workspace = true }
-meta_client = { workspace = true }
-snafu = { workspace = true }
-system_catalog = { workspace = true }
-table_engine = { workspace = true }
-tokio = { workspace = true }
+async-trait.workspace = true
+catalog.workspace = true
+cluster.workspace = true
+common_types.workspace = true
+generic_error.workspace = true
+logger.workspace = true
+macros.workspace = true
+meta_client.workspace = true
+snafu.workspace = true
+system_catalog.workspace = true
+table_engine.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 analytic_engine = { workspace = true, features = ["test"] }

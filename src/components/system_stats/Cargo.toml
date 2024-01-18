@@ -30,4 +30,4 @@ workspace = true
 
 [dependencies]
 sysinfo = { version = "0.30", default-features = false }
-tokio = { workspace = true }
+tokio.workspace = true

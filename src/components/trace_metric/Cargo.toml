@@ -31,4 +31,4 @@ workspace = true
 workspace = true
 
 [dependencies]
-trace_metric_derive = { workspace = true }
+trace_metric_derive.workspace = true

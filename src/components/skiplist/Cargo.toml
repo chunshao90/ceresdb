@@ -29,12 +29,12 @@ workspace = true
 workspace = true
 
 [dependencies]
-arena = { workspace = true }
-bytes = { workspace = true }
-rand = { workspace = true }
+arena.workspace = true
+bytes.workspace = true
+rand.workspace = true
 
 [dev-dependencies]
-criterion = { workspace = true }
+criterion.workspace = true
 yatp = { git = "https://github.com/tikv/yatp.git", rev = "4b71f8abd86890f0d1e95778c2b6bf5a9ee4c502" }
 
 [[bench]]

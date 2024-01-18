@@ -31,14 +31,14 @@ workspace = true
 workspace = true
 
 [dependencies]
-arrow = { workspace = true }
-arrow_ext = { workspace = true }
-async-trait = { workspace = true }
-bytes = { workspace = true }
-datafusion = { workspace = true }
-futures = { workspace = true }
-generic_error = { workspace = true }
-logger = { workspace = true }
-object_store = { workspace = true }
-parquet = { workspace = true }
-tokio = { workspace = true }
+arrow.workspace = true
+arrow_ext.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+datafusion.workspace = true
+futures.workspace = true
+generic_error.workspace = true
+logger.workspace = true
+object_store.workspace = true
+parquet.workspace = true
+tokio.workspace = true

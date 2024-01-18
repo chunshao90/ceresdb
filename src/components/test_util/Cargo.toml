@@ -32,7 +32,7 @@ workspace = true
 
 [dependencies]
 # In alphabetical order
-arrow = { workspace = true }
-chrono = { workspace = true }
+arrow.workspace = true
+chrono.workspace = true
 common_types = { workspace = true, features = ["test"] }
-env_logger = { workspace = true }
+env_logger.workspace = true

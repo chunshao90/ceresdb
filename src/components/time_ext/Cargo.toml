@@ -32,13 +32,13 @@ workspace = true
 
 [dependencies]
 # In alphabetical order
-chrono = { workspace = true }
-common_types = { workspace = true }
-horaedbproto = { workspace = true }
-macros = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-snafu = { workspace = true }
+chrono.workspace = true
+common_types.workspace = true
+horaedbproto.workspace = true
+macros.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+snafu.workspace = true
 
 [dev-dependencies]
-toml = { workspace = true }
+toml.workspace = true

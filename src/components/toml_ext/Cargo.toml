@@ -31,10 +31,10 @@ workspace = true
 workspace = true
 
 [dependencies]
-macros = { workspace = true }
-serde = { workspace = true }
-snafu = { workspace = true }
-toml = { workspace = true }
+macros.workspace = true
+serde.workspace = true
+snafu.workspace = true
+toml.workspace = true
 
 [dev-dependencies]
-tempfile = { workspace = true }
+tempfile.workspace = true

@@ -31,53 +31,53 @@ workspace = true
 workspace = true
 
 [dependencies]
-arrow = { workspace = true }
-arrow_ext = { workspace = true }
-async-trait = { workspace = true }
-bytes = { workspace = true }
-catalog = { workspace = true }
-clru = { workspace = true }
-cluster = { workspace = true }
-common_types = { workspace = true }
-datafusion = { workspace = true }
-df_operator = { workspace = true }
-futures = { workspace = true }
-generic_error = { workspace = true }
-horaedbproto = { workspace = true }
+arrow.workspace = true
+arrow_ext.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+catalog.workspace = true
+clru.workspace = true
+cluster.workspace = true
+common_types.workspace = true
+datafusion.workspace = true
+df_operator.workspace = true
+futures.workspace = true
+generic_error.workspace = true
+horaedbproto.workspace = true
 http = "0.2"
 influxdb-line-protocol = "1.0"
-influxql-query = { workspace = true }
-interpreters = { workspace = true }
-itertools = { workspace = true }
-lazy_static = { workspace = true }
-logger = { workspace = true }
-macros = { workspace = true }
-meta_client = { workspace = true }
-notifier = { workspace = true }
-paste = { workspace = true }
+influxql-query.workspace = true
+interpreters.workspace = true
+itertools.workspace = true
+lazy_static.workspace = true
+logger.workspace = true
+macros.workspace = true
+meta_client.workspace = true
+notifier.workspace = true
+paste.workspace = true
 prom-remote-api = { workspace = true, features = ["warp"] }
-prometheus = { workspace = true }
-prometheus-static-metric = { workspace = true }
-prost = { workspace = true }
-query_engine = { workspace = true }
-query_frontend = { workspace = true }
-router = { workspace = true }
-runtime = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-snafu = { workspace = true }
-spin = { workspace = true }
-sqlparser = { workspace = true }
-table_engine = { workspace = true }
-time_ext = { workspace = true }
-timed_task = { workspace = true }
-tokio = { workspace = true }
+prometheus.workspace = true
+prometheus-static-metric.workspace = true
+prost.workspace = true
+query_engine.workspace = true
+query_frontend.workspace = true
+router.workspace = true
+runtime.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+snafu.workspace = true
+spin.workspace = true
+sqlparser.workspace = true
+table_engine.workspace = true
+time_ext.workspace = true
+timed_task.workspace = true
+tokio.workspace = true
 tokio-stream = { version = "0.1", features = ["net"] }
-tonic = { workspace = true }
+tonic.workspace = true
 warp = "0.3"
-zstd = { workspace = true }
+zstd.workspace = true
 
 [dev-dependencies]
 json_pretty = "0.1.2"
 query_frontend = { workspace = true, features = ["test"] }
-system_catalog = { workspace = true }
+system_catalog.workspace = true

@@ -35,20 +35,20 @@ test = []
 
 [dependencies]
 # In alphabetical order
-arrow = { workspace = true }
-arrow_ext = { workspace = true }
-bytes_ext = { workspace = true }
-chrono = { workspace = true }
-datafusion = { workspace = true }
-hash_ext = { workspace = true }
-horaedbproto = { workspace = true }
-macros = { workspace = true }
-paste = { workspace = true }
-prost = { workspace = true }
-rand = { workspace = true }
+arrow.workspace = true
+arrow_ext.workspace = true
+bytes_ext.workspace = true
+chrono.workspace = true
+datafusion.workspace = true
+hash_ext.workspace = true
+horaedbproto.workspace = true
+macros.workspace = true
+paste.workspace = true
+prost.workspace = true
+rand.workspace = true
 seahash = "4.1.0"
-serde = { workspace = true }
-serde_json = { workspace = true }
-snafu = { workspace = true }
-sqlparser = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+snafu.workspace = true
+sqlparser.workspace = true
 uuid = { workspace = true, features = ["fast-rng"] }

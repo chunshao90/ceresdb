@@ -31,7 +31,7 @@ workspace = true
 workspace = true
 
 [dependencies]
-serde = { workspace = true }
+serde.workspace = true
 
 [dev-dependencies]
-toml = { workspace = true }
+toml.workspace = true

@@ -31,17 +31,17 @@ workspace = true
 workspace = true
 
 [dependencies]
-analytic_engine = { workspace = true }
+analytic_engine.workspace = true
 anyhow = { version = "1.0", features = ["backtrace"] }
 clap = { workspace = true, features = ["derive"] }
-common_types = { workspace = true }
-futures = { workspace = true }
-generic_error = { workspace = true }
+common_types.workspace = true
+futures.workspace = true
+generic_error.workspace = true
 num_cpus = "1.15.0"
-object_store = { workspace = true }
-parquet = { workspace = true }
-parquet_ext = { workspace = true }
-runtime = { workspace = true }
-table_engine = { workspace = true }
-time_ext = { workspace = true }
-tokio = { workspace = true }
+object_store.workspace = true
+parquet.workspace = true
+parquet_ext.workspace = true
+runtime.workspace = true
+table_engine.workspace = true
+time_ext.workspace = true
+tokio.workspace = true

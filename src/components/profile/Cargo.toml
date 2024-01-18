@@ -37,5 +37,5 @@ workspace = true
 [dependencies]
 jemalloc-ctl = "0.3.2"
 jemallocator = "0.3.2"
-logger = { workspace = true }
+logger.workspace = true
 pprof = { workspace = true, features = ["flamegraph"] }

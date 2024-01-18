@@ -36,10 +36,10 @@ rev = "d592f88e4dbba5eb439998463054f1a44fbf17b9"
 workspace = true
 
 [dependencies]
-chrono = { workspace = true }
+chrono.workspace = true
 log = "0.4"
-runtime = { workspace = true }
-serde = { workspace = true }
-slog = { workspace = true }
+runtime.workspace = true
+serde.workspace = true
+slog.workspace = true
 slog-async = "2.6"
 slog-term = "2.8"
