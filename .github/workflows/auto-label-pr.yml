@@ -24,15 +24,13 @@ jobs:
               '!:': 'breaking-change',
               'feat:': 'feature',
               'fix:': 'bug',
-              'docs:': 'documentation',
-              'style:': 'style',
+              'docs:': 'docs',
               'refactor:': 'refactor',
-              'test:': 'test',
               'chore:': 'chore'
             };
             const title = context.payload.pull_request.title.toLowerCase();
             const labelsToAdd = Object.entries(patternMap)
-              .filter(([key, ]) => title.startsWith(key))
+              .filter(([key, ]) => title.contains(key))
               .map(([, label]) => label);
             
             if (labelsToAdd.length > 0) {
